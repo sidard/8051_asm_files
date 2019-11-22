@@ -1,101 +1,129 @@
 #include<reg51.h>
-#include"types.h"
-#include"delay.h"
-#include"lcd.h"
-#include"keypad.h"
-sbit led = P3^0;
+sbit rs = P3^4;
+sbit rw = P3^5;
+sbit en = P3^6;
+#define LCD_data P0
 
-s8 flg=0,cnt,key_pin=0,i=0,cmd=0x80;
-
-void ISR_TF (void) interrupt 1
+void delay_ms(unsigned int delay)
 {
-	TF0=0;
-	TR0=0;
-  cmd=0x06;
-	led=0;
+	unsigned int j;
+	for(delay; delay>0;delay--)
+	  for(j=121;j>0;j--);
+}
+	
+void LCD_Init(void);
+void LCD_cmd(char);
+void LCD_disp(char);
+void LCD_char(char);
+void LCD_str(char*);
+
+void UART_Init(void)
+{
+	SCON = 0x50;
+	TMOD = 0X20;
+	TH1= -3;
+	TR1=1;
 }
 
-
-sbit LED = P1^4;
-sbit sw= P3^2;
-code s8 c[][4]={{'1'},"ABC2","DEF3","GHI4","JKL5","MNO6","PQR7","STU8","VWX9","YZ*",{'0'},{'#'}};
-	
+char UART_Rx(void)
+{
+   while(RI==0);
+		 RI=0;
+	  return (SBUF);
+}
+void UART_Tx(char ch)
+{
+	  SBUF=ch;
+		while(TI==0);
+	  TI=0;     
+}
 
 main()
 {
-	s8 ch,prev='\0';
+	char j=0,i=0,tmp=0,ch,c[2]={0},d,o[2]={0};
 	LCD_Init();
-	//interrupts initialization
-	EA=1;
-	ET0=1;
-	//timers initialization
-	TMOD = 0X01;
-
-
+	LCD_cmd(0x80);
+	LCD_str("Serial Comm");
+	LCD_cmd(0xc0);
+	UART_Init();
 	while(1){
-		LCD_cmd(cmd);
-		TL0 = 0X00;
-	  TH0 = 0XFF;
-		Row_Init();
-	while(ColStatus()==1)
+	ch=UART_Rx();
+		//ch='B';
+  d=ch;
+	do
 	{
-		TR0=1;
+		c[i]=d%10 + 48;
+    i++;
+		d/=10;
+	}while(d);
+  //c[i]= '\0';
+	i--;
+	do
+	{
+	LCD_char(c[i]);
+	i--;
+	}while(i!=-1);
+ 
+	d=ch;
+	o[j]=d%16 + 48;
+	j++;
+	o[j]=d/16 + 48;
+  LCD_cmd(0xc3);
+	do
+	{
+	LCD_char(o[j]);
+	j--;
+	}while(j!=-1);
+  
+		
+	UART_Tx(ch);
 	}
-	ch=KeyScan();//ch given key num
-	if(ch != prev)
+}
+void LCD_cmd(char cmd)
+{
+	rs = 0;
+	LCD_disp(cmd);
+}
+void LCD_disp(char cmd)
+{
+	rw =0;
+	LCD_data = cmd;
+	en = 1;
+	en = 0;
+	delay_ms(1);
+}
+
+void LCD_Init(void)
+{
+	delay_ms(16);
+	
+	LCD_cmd(0x30);
+	delay_ms(6);
+	
+	LCD_cmd(0x30);
+	delay_ms(1);
+	
+	LCD_cmd(0x30);
+	delay_ms(1);
+	
+	LCD_cmd(0x38);
+	LCD_cmd(0x10);
+	LCD_cmd(0x01);
+	LCD_cmd(0x06);
+	LCD_cmd(0x0f);		
+}
+void LCD_char(char ch)
+{
+	rs=1;
+	LCD_disp(ch);
+}
+
+void LCD_str(char *s)
+{
+	int i=0 ;
+	while(s[i]!='\0')
 	{
-		prev=ch;
-		cnt=0;
-		}
-	else
-	{
-		goto sw;
+		LCD_char(s[i]);
+		i++;
 	}
-	
-	
-	sw:	switch(ch){
-			
-		//key 0
-			case 0:
-     				cnt++;//cnt gives exctly key pin to disply from loop up tble
-		        if(cnt==1)
-			      LCD_char(c[ch][cnt-1]);	
-		        cnt=0;
-	          break;
-						 //key 9*/
-			 	case 9:
-		         cnt++;
-	           if(cnt==1)
-		         LCD_char(c[ch][cnt-1]);
-             else if(cnt==2)
-             LCD_char(c[ch][cnt-1]);
-             else if(cnt==3)
-             LCD_char(c[ch][cnt-1]);
-	           else
-		         cnt=0;
-						 break;
-						 //key 10
-			  case 10:
-				     cnt=0;
-		         LCD_char(c[ch][cnt]);
-						 break;
-				case 11:
-		         cnt=0;
-		         LCD_char(c[ch][cnt]);  
-						 break;
-				default:
-					  cnt++;
-	           if(cnt==1)
-		         LCD_char(c[ch][cnt-1]);
-             else if(cnt==2)
-             LCD_char(c[ch][cnt-1]);
-             else if(cnt==3)
-             LCD_char(c[ch][cnt-1]);
-             else if(cnt==4) 
-             LCD_char(c[ch][cnt-1]);
-	           else
-		         cnt=0;
-						 break;
-					 }//switch
-	}//while
-}//main
+}
